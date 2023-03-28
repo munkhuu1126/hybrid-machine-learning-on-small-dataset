@@ -6,7 +6,7 @@ Command to install dependecies:
 ```sh
 pip install -r requirements.txt
 ```
-#Step 2
+# Step 2
 To start training:
 ```sh
 python3 main.py -split .1_.3_.5_.7 -batch 8_32_64_128 -model nn
