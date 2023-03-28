@@ -200,5 +200,5 @@ if __name__ == "__main__":
     model = args.model
     main(splits, batch_sizes, model_choice=model)
 
-# ! default option
-# python3 main.py -split .3_.5_.7 -batch 8_32_64_128 -model nn
+# paste it to terminal and run
+# python3 main.py -split .1_.3_.5_.7 -batch 8_32_64_128 -model nn
