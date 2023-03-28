@@ -2,34 +2,52 @@ import torch
 from torch.utils.data import DataLoader
 from torchvision import datasets
 from torchvision.transforms import ToTensor
+from torchvision import transforms
 from torch import nn
-from common import NeuralNetwork, CNN
+from common import NeuralNetwork, CNN, CIFARCNN
 import matplotlib.pyplot as plt
 import numpy as np
 import argparse
+import pandas as pd
 device = "cuda" if torch.cuda.is_available(
 ) else "mps" if torch.backends.mps.is_available() else "cpu"
+
 
 def models(choice):
     if choice.lower() == 'nn':
         return NeuralNetwork().to(device)
     elif choice.lower() == 'cnn':
         return CNN().to(device)
-    else: 
+    elif choice.lower() == 'cifarcnn':
+        return CIFARCNN().to(device)
+    else:
         assert choice == 'nn' or choice == 'cnn', f"The following model is not in the choices or haven't been made yet: {choice}"
 
+
 def dataload(first_split):
-    training_data = datasets.FashionMNIST(
+    transform_train = transforms.Compose([
+        transforms.RandomCrop(32, padding=4),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        transforms.Normalize((0.5071, 0.4865, 0.4409),
+                             (0.2673, 0.2564, 0.2762))
+    ])
+    transform_test = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.5071, 0.4865, 0.4409),
+                             (0.2673, 0.2564, 0.2762))
+    ])
+    training_data = datasets.CIFAR100(
         root="data",
         train=True,
         download=True,
-        transform=ToTensor()
+        transform=transform_train
     )
-    test_data = datasets.FashionMNIST(
+    test_data = datasets.CIFAR100(
         root="data",
         train=False,
         download=True,
-        transform=ToTensor()
+        transform=transform_test
     )
     # train_data1, train_data2 = torch.utils.data.random_split(
     #     training_data, [int(len(training_data)*first_split),
@@ -104,19 +122,18 @@ def test(dataloader, model, loss_fn):
             correct += (pred.argmax(1) == y).type(torch.float).sum().item()
     test_loss /= num_batches
     correct /= size
+    print(f'test loss: {test_loss}')
     return 100*correct
 
 
 def main(splits, batch_sizes, model_choice):
+    accuracy1 = []
+    accuracy2 = []
+
     for batch_size in batch_sizes:
         for split in splits:
-            accuracy1 = []
-            accuracy2 = []
-            # first_split = split
-            # second_split = 1-split
             train_data1, train_data2, test_data = dataload(split)
             train_dataloader1 = DataLoader(train_data1, batch_size=batch_size)
-            train_dataloader2 = DataLoader(train_data2, batch_size=batch_size)
             test_dataloader = DataLoader(test_data, batch_size=batch_size)
             model = models(model_choice)
             loss_fn = nn.CrossEntropyLoss()
@@ -126,12 +143,22 @@ def main(splits, batch_sizes, model_choice):
                 print(
                     f"Single Train Epoch {t+1}\n-----------------------------------------")
 
-                train_one_data(dataloader=train_dataloader2, model=model,
+                train_one_data(dataloader=train_dataloader1, model=model,
                                loss_fn=loss_fn, optimizer=optimizer)
-                accuracy1.append(test(test_dataloader, model, loss_fn))
+                accuracy = test(test_dataloader, model, loss_fn)
+                print(
+                    f"{batch_size}, {split}, single:{accuracy}")
+            accuracy1.append(accuracy)
             del model
             torch.cuda.empty_cache()
+    for batch_size in batch_sizes:
+        for split in splits:
+            train_data1, train_data2, test_data = dataload(split)
+            train_dataloader1 = DataLoader(train_data1, batch_size=batch_size)
+            train_dataloader2 = DataLoader(train_data2, batch_size=batch_size)
+            test_dataloader = DataLoader(test_data, batch_size=batch_size)
             model2 = models(model_choice)
+            loss_fn = nn.CrossEntropyLoss()
             loss_fn2 = nn.MSELoss()
             optimizer = torch.optim.Adam(model2.parameters(), lr=1e-4)
             for t in range(epochs):
@@ -139,30 +166,42 @@ def main(splits, batch_sizes, model_choice):
                     f"Double Train Epoch {t+1}\n-----------------------------------------")
                 train_both(train_dataloader1, train_dataloader2,
                            model2, loss_fn, loss_fn2, optimizer)
-                accuracy2.append(test(test_dataloader, model2, loss_fn))
-            # plt.plot(accuracy2)
-            # plt.xlabel('no of epochs')
-            # plt.ylabel("accuracy")
-            # plt.title("Epoch vs Accuracy")
-            # plt.show()
+                accuracy = test(test_dataloader, model2, loss_fn)
             print(
-                f"{batch_size}, {split}, loader1:{np.max(accuracy1)}, loader2: {np.max(accuracy2)}")
+                f"{batch_size}, {split},  both: {accuracy}")
+            accuracy2.append(accuracy)
             del model2
             torch.cuda.empty_cache()
+    d = {
+        'Batch/Sizes': ['8', '32', '64', '128', 'AVERAGE'],
+        '10': [accuracy1[0], accuracy1[4], accuracy1[8], accuracy1[12], sum([accuracy1[0], accuracy1[4], accuracy1[8], accuracy1[12]])/4],
+        '30': [accuracy1[1], accuracy1[5], accuracy1[9], accuracy1[13],  sum([accuracy1[1], accuracy1[5], accuracy1[9], accuracy1[13]])/4],
+        '50': [accuracy1[2], accuracy1[6], accuracy1[10], accuracy1[14], sum([accuracy1[2], accuracy1[6], accuracy1[10], accuracy1[14]])/4],
+        '70': [accuracy1[3], accuracy1[7], accuracy1[11], accuracy1[15], sum([accuracy1[3], accuracy1[7], accuracy1[11], accuracy1[15]])/4],
+        '10/90': [accuracy2[0], accuracy2[4], accuracy2[8], accuracy2[12], sum([accuracy2[0], accuracy2[4], accuracy2[8], accuracy2[12]])/4],
+        '30/70': [accuracy2[1], accuracy2[5], accuracy2[9], accuracy2[13], sum([accuracy2[1], accuracy2[5], accuracy2[9], accuracy2[13]])/4],
+        '50/50': [accuracy2[2], accuracy2[6], accuracy2[10], accuracy2[14], sum([accuracy2[2], accuracy2[6], accuracy2[10], accuracy2[14]])/4],
+        '70/30': [accuracy2[3], accuracy2[7], accuracy2[11], accuracy2[15], sum([accuracy2[3], accuracy2[7], accuracy2[11], accuracy2[15]])/4],
+    }
+    df = pd.DataFrame(data=d)
+    print(
+        f'-------------------------{model_choice} Results----------------------------------\n')
+    print(df)
 
 
 if __name__ == "__main__":
     argParser = argparse.ArgumentParser()
     argParser.add_argument('-split', "--split_size",
                            help="Enter split portion ex=.3_.5_.7")
-    argParser.add_argument('-batch', "--batch_size", help="Enter batch sizes ex=8_32_64_128")
+    argParser.add_argument('-batch', "--batch_size",
+                           help="Enter batch sizes ex=8_32_64_128")
     argParser.add_argument('-model', '--model',
                            help="Model Choice [nn, cnn, yolo]")
     args = argParser.parse_args()
     splits = [float(i) for i in list(args.split_size.split('_'))]
     batch_sizes = [int(i) for i in list(args.batch_size.split('_'))]
     model = args.model
-    main(splits, batch_sizes, model_choice = model)
+    main(splits, batch_sizes, model_choice=model)
 
 # ! default option
 # python3 main.py -split .3_.5_.7 -batch 8_32_64_128 -model nn
