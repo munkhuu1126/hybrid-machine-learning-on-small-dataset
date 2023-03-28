@@ -25,29 +25,29 @@ def models(choice):
 
 
 def dataload(first_split):
-    transform_train = transforms.Compose([
-        transforms.RandomCrop(32, padding=4),
-        transforms.RandomHorizontalFlip(),
-        transforms.ToTensor(),
-        transforms.Normalize((0.5071, 0.4865, 0.4409),
-                             (0.2673, 0.2564, 0.2762))
-    ])
-    transform_test = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize((0.5071, 0.4865, 0.4409),
-                             (0.2673, 0.2564, 0.2762))
-    ])
-    training_data = datasets.CIFAR100(
+    # transform_train = transforms.Compose([
+    #     transforms.RandomCrop(32, padding=4),
+    #     transforms.RandomHorizontalFlip(),
+    #     transforms.ToTensor(),
+    #     transforms.Normalize((0.5071, 0.4865, 0.4409),
+    #                          (0.2673, 0.2564, 0.2762))
+    # ])
+    # transform_test = transforms.Compose([
+    #     transforms.ToTensor(),
+    #     transforms.Normalize((0.5071, 0.4865, 0.4409),
+    #                          (0.2673, 0.2564, 0.2762))
+    # ])
+    training_data = datasets.FashionMNIST(
         root="data",
         train=True,
         download=True,
-        transform=transform_train
+        transform=ToTensor()
     )
-    test_data = datasets.CIFAR100(
+    test_data = datasets.FashionMNIST(
         root="data",
         train=False,
         download=True,
-        transform=transform_test
+        transform=ToTensor()
     )
     # train_data1, train_data2 = torch.utils.data.random_split(
     #     training_data, [int(len(training_data)*first_split),
@@ -76,8 +76,6 @@ def train_one_data(dataloader, model, loss_fn, optimizer):
 
 
 def train_both(dataloader1, dataloader2, model, loss_fn, loss_fn2, optimizer):
-    size1 = len(dataloader1.dataset)
-    size2 = len(dataloader2.dataset)
     model.train()
     for batch, ((X, y), (X1, y1)) in enumerate(zip(dataloader1, dataloader2)):
         X, y = X.to(device), y.to(device)
@@ -96,7 +94,7 @@ def train_both(dataloader1, dataloader2, model, loss_fn, loss_fn2, optimizer):
         loss2 = loss_fn2(pred2, pred3)
         # loss3 = loss+loss2
         # Backpropagation 2
-        loss2.backward(retain_graph=False)
+        loss2.backward(retain_graph=True)
 
         optimizer.step()
         # if batch % 100 == 0:
@@ -129,28 +127,27 @@ def test(dataloader, model, loss_fn):
 def main(splits, batch_sizes, model_choice):
     accuracy1 = []
     accuracy2 = []
+    epochs=10
+    # for batch_size in batch_sizes:
+    #     for split in splits:
+    #         train_data1, train_data2, test_data = dataload(split)
+    #         train_dataloader1 = DataLoader(train_data1, batch_size=batch_size)
+    #         test_dataloader = DataLoader(test_data, batch_size=batch_size)
+    #         model = models(model_choice)
+    #         loss_fn = nn.CrossEntropyLoss()
+    #         optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+    #         for t in range(epochs):
+    #             print(
+    #                 f"Single Train Epoch {t+1}\n-----------------------------------------")
 
-    for batch_size in batch_sizes:
-        for split in splits:
-            train_data1, train_data2, test_data = dataload(split)
-            train_dataloader1 = DataLoader(train_data1, batch_size=batch_size)
-            test_dataloader = DataLoader(test_data, batch_size=batch_size)
-            model = models(model_choice)
-            loss_fn = nn.CrossEntropyLoss()
-            optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
-            epochs = 10
-            for t in range(epochs):
-                print(
-                    f"Single Train Epoch {t+1}\n-----------------------------------------")
-
-                train_one_data(dataloader=train_dataloader1, model=model,
-                               loss_fn=loss_fn, optimizer=optimizer)
-                accuracy = test(test_dataloader, model, loss_fn)
-                print(
-                    f"{batch_size}, {split}, single:{accuracy}")
-            accuracy1.append(accuracy)
-            del model
-            torch.cuda.empty_cache()
+    #             train_one_data(dataloader=train_dataloader1, model=model,
+    #                            loss_fn=loss_fn, optimizer=optimizer)
+    #             accuracy = test(test_dataloader, model, loss_fn)
+    #             print(
+    #                 f"{batch_size}, {split}, single:{accuracy}")
+    #         accuracy1.append(accuracy)
+    #         del model
+    #         torch.cuda.empty_cache()
     for batch_size in batch_sizes:
         for split in splits:
             train_data1, train_data2, test_data = dataload(split)
