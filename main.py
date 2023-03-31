@@ -4,11 +4,13 @@ from torchvision import datasets
 from torchvision.transforms import ToTensor
 from torchvision import transforms
 from torch import nn
-from common import NeuralNetwork, CNN, CIFARCNN
+from common import NeuralNetwork, CNN, CIFARCNN, ResNet_18
 import matplotlib.pyplot as plt
 import numpy as np
 import argparse
 import pandas as pd
+import os
+from datetime import datetime as dt
 device = "cuda" if torch.cuda.is_available(
 ) else "mps" if torch.backends.mps.is_available() else "cpu"
 
@@ -20,34 +22,36 @@ def models(choice):
         return CNN().to(device)
     elif choice.lower() == 'cifarcnn':
         return CIFARCNN().to(device)
+    elif choice.lower() == 'resnet18':
+        return ResNet_18(3, 100).to(device)
     else:
         assert choice == 'nn' or choice == 'cnn', f"The following model is not in the choices or haven't been made yet: {choice}"
 
 
 def dataload(first_split):
-    # transform_train = transforms.Compose([
-    #     transforms.RandomCrop(32, padding=4),
-    #     transforms.RandomHorizontalFlip(),
-    #     transforms.ToTensor(),
-    #     transforms.Normalize((0.5071, 0.4865, 0.4409),
-    #                          (0.2673, 0.2564, 0.2762))
-    # ])
-    # transform_test = transforms.Compose([
-    #     transforms.ToTensor(),
-    #     transforms.Normalize((0.5071, 0.4865, 0.4409),
-    #                          (0.2673, 0.2564, 0.2762))
-    # ])
-    training_data = datasets.FashionMNIST(
+    transform_train = transforms.Compose([
+        transforms.RandomCrop(32, padding=4),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        transforms.Normalize((0.5071, 0.4865, 0.4409),
+                             (0.2673, 0.2564, 0.2762))
+    ])
+    transform_test = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.5071, 0.4865, 0.4409),
+                             (0.2673, 0.2564, 0.2762))
+    ])
+    training_data = datasets.CIFAR100(
         root="data",
         train=True,
         download=True,
-        transform=ToTensor()
+        transform=transform_train
     )
-    test_data = datasets.FashionMNIST(
+    test_data = datasets.CIFAR100(
         root="data",
         train=False,
         download=True,
-        transform=ToTensor()
+        transform=transform_test
     )
     # train_data1, train_data2 = torch.utils.data.random_split(
     #     training_data, [int(len(training_data)*first_split),
@@ -127,27 +131,27 @@ def test(dataloader, model, loss_fn):
 def main(splits, batch_sizes, model_choice):
     accuracy1 = []
     accuracy2 = []
-    epochs=10
-    # for batch_size in batch_sizes:
-    #     for split in splits:
-    #         train_data1, train_data2, test_data = dataload(split)
-    #         train_dataloader1 = DataLoader(train_data1, batch_size=batch_size)
-    #         test_dataloader = DataLoader(test_data, batch_size=batch_size)
-    #         model = models(model_choice)
-    #         loss_fn = nn.CrossEntropyLoss()
-    #         optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
-    #         for t in range(epochs):
-    #             print(
-    #                 f"Single Train Epoch {t+1}\n-----------------------------------------")
+    epochs = 10
+    for batch_size in batch_sizes:
+        for split in splits:
+            train_data1, train_data2, test_data = dataload(split)
+            train_dataloader1 = DataLoader(train_data1, batch_size=batch_size)
+            test_dataloader = DataLoader(test_data, batch_size=batch_size)
+            model = models(model_choice)
+            loss_fn = nn.CrossEntropyLoss()
+            optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+            for t in range(epochs):
+                print(
+                    f"Single Train Epoch {t+1}\n-----------------------------------------")
 
-    #             train_one_data(dataloader=train_dataloader1, model=model,
-    #                            loss_fn=loss_fn, optimizer=optimizer)
-    #             accuracy = test(test_dataloader, model, loss_fn)
-    #             print(
-    #                 f"{batch_size}, {split}, single:{accuracy}")
-    #         accuracy1.append(accuracy)
-    #         del model
-    #         torch.cuda.empty_cache()
+                train_one_data(dataloader=train_dataloader1, model=model,
+                               loss_fn=loss_fn, optimizer=optimizer)
+                accuracy = test(test_dataloader, model, loss_fn)
+                print(
+                    f"{batch_size}, {split}, single:{accuracy}")
+            accuracy1.append(accuracy)
+            del model
+            torch.cuda.empty_cache()
     for batch_size in batch_sizes:
         for split in splits:
             train_data1, train_data2, test_data = dataload(split)
@@ -181,9 +185,13 @@ def main(splits, batch_sizes, model_choice):
         '70/30': [accuracy2[3], accuracy2[7], accuracy2[11], accuracy2[15], sum([accuracy2[3], accuracy2[7], accuracy2[11], accuracy2[15]])/4],
     }
     df = pd.DataFrame(data=d)
+    newpath = r'./results'
+    if not os.path.exists(newpath):
+        os.makedirs(newpath)
+    df.to_csv(f'./results/{dt.now().isoformat()}.csv', sep="\t", index=False)
     print(
         f'-------------------------{model_choice} Results----------------------------------\n')
-    print(df)
+    print(f"the results have been save to /results directory")
 
 
 if __name__ == "__main__":
@@ -197,8 +205,10 @@ if __name__ == "__main__":
     args = argParser.parse_args()
     splits = [float(i) for i in list(args.split_size.split('_'))]
     batch_sizes = [int(i) for i in list(args.batch_size.split('_'))]
+
     model = args.model
     main(splits, batch_sizes, model_choice=model)
+
 
 # paste it to terminal and run
 # python3 main.py -split .1_.3_.5_.7 -batch 8_32_64_128 -model nn
