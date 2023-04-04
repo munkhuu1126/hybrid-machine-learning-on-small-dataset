@@ -211,4 +211,4 @@ if __name__ == "__main__":
 
 
 # paste it to terminal and run
-# python3 main.py -split .1_.3_.5_.7 -batch 8_32_64_128 -model nn
+# python3 main.py -split .1_.3_.5_.7 -batch 8_32_64_128 -model resnet18
